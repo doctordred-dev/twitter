@@ -23,6 +23,8 @@ model User {
   updatedAt     DateTime @updatedAt
 
   posts         Post[]
+  sessions      Session[]
+  emailTokens   EmailToken[]
 }
 
 model Post {
@@ -36,4 +38,32 @@ model Post {
   isDeleted Boolean  @default(false)
 
   @@index([authorId, createdAt])
+}
+
+model Session {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  tokenHash   String
+  rememberMe  Boolean  @default(false)
+  deviceInfo  String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model EmailToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  token     String   @unique
+  type      String   // 'verify' or 'reset'
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
 }

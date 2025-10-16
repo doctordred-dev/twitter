@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Подтверждение email</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #1da1f2; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .button { 
+            display: inline-block; 
+            background: #1da1f2; 
+            color: white; 
+            padding: 12px 24px; 
+            text-decoration: none; 
+            border-radius: 4px; 
+            margin: 20px 0;
+        }
+        .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Добро пожаловать в Twitter Clone!</h1>
+        </div>
+        <div class="content">
+            <h2>Привет, {{username}}!</h2>
+            <p>Спасибо за регистрацию. Для завершения настройки аккаунта подтвердите ваш email адрес.</p>
+            <p>Нажмите на кнопку ниже, чтобы подтвердить email:</p>
+            <a href="{{verifyUrl}}" class="button">Подтвердить email</a>
+            <p>Если кнопка не работает, скопируйте и вставьте эту ссылку в браузер:</p>
+            <p style="word-break: break-all; background: #eee; padding: 10px;">{{verifyUrl}}</p>
+            <p>Ссылка действительна в течение 24 часов.</p>
+        </div>
+        <div class="footer">
+            <p>Если вы не регистрировались на нашем сайте, просто проигнорируйте это письмо.</p>
+        </div>
+    </div>
+</body>
+</html>

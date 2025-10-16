@@ -15,5 +15,11 @@ export const createApp = () => {
     res.json({ ok: true });
   });
 
+  // routes
+  import('express').then(async () => {
+    const { default: authRoutes } = await import('./routes/auth.routes.js');
+    app.use('/auth', authRoutes);
+  });
+
   return app;
 };
