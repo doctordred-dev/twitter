@@ -1,5 +1,6 @@
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { initIo } from './sockets/io.js';
 import { createApp } from './app.js';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
@@ -14,6 +15,7 @@ async function main() {
   const httpServer = createServer(app);
 
   const io = new Server(httpServer, { cors: { origin: true, credentials: true } });
+  initIo(io);
   io.on('connection', (socket) => {
     socket.emit('hello', { message: 'connected' });
   });
