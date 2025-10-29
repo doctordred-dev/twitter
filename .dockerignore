@@ -3,3 +3,10 @@ npm-debug.log
 dist
 .env
 .prisma
+.git
+.gitignore
+README.md
+tests
+coverage
+*.log
+.DS_Store
