@@ -41,5 +41,6 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD node -e "import('http').then(m=>m.default.get('http://localhost:3000/health',r=>{process.exit(r.statusCode===200?0:1)}))"
 
-CMD ["npm", "start"]
+# Запускаем миграции перед стартом приложения (обходит ограничение Pre-Deploy на бесплатном Render)
+CMD ["sh", "-c", "npm run prisma:migrate && npm start"]
 

@@ -11,6 +11,12 @@ dotenv.config();
 const PORT = Number(process.env.PORT || 3000);
 
 async function main() {
+  // Проверка переменных окружения
+  if (!process.env.DATABASE_URL) {
+    console.error('❌ DATABASE_URL is not set');
+    process.exit(1);
+  }
+
   const app = createApp();
   const httpServer = createServer(app);
 
@@ -28,8 +34,8 @@ async function main() {
   redis.on('error', (err: unknown) => console.error('Redis error', err));
   await redis.connect();
 
-  httpServer.listen(PORT, () => {
-    console.log(`Server listening on http://localhost:${PORT}`);
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server listening on port ${PORT}`);
   });
 }
 
