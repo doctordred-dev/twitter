@@ -24,13 +24,21 @@ export function setRefreshCookie(req: Request, res: Response, refreshToken: stri
   const useSecure = shouldUseSecure(req);
   const origin = req.headers.origin || '';
   
-  // Если origin отличается от хоста API (cross-origin), используем SameSite=None
-  const isCrossOrigin = origin && !origin.includes(req.hostname || 'twitter-bny4.onrender.com');
+  // Определяем, нужен ли SameSite=None (для cross-origin)
+  // В продакшене с HTTPS всегда используем None для кросс-доменных запросов
+  const sameSiteValue = (useSecure && origin) ? 'none' : 'lax';
+  
+  console.log('🍪 setRefreshCookie:', {
+    origin,
+    useSecure,
+    sameSite: sameSiteValue,
+    isProd,
+  });
   
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: useSecure,
-    sameSite: (useSecure && isCrossOrigin) ? 'none' : 'lax',
+    sameSite: sameSiteValue,
     maxAge: maxAgeDays * 24 * 60 * 60 * 1000,
     path: '/',
   });
@@ -40,13 +48,13 @@ export function clearRefreshCookie(req: Request, res: Response) {
   const useSecure = shouldUseSecure(req);
   const origin = req.headers.origin || '';
   
-  // Если origin отличается от хоста API (cross-origin), используем SameSite=None
-  const isCrossOrigin = origin && !origin.includes(req.hostname || 'twitter-bny4.onrender.com');
+  // Определяем, нужен ли SameSite=None (для cross-origin)
+  const sameSiteValue = (useSecure && origin) ? 'none' : 'lax';
   
   res.clearCookie('refreshToken', {
     httpOnly: true,
     secure: useSecure,
-    sameSite: (useSecure && isCrossOrigin) ? 'none' : 'lax',
+    sameSite: sameSiteValue,
     path: '/',
   });
 }
