@@ -35,7 +35,7 @@ router.post('/login', async (req, res) => {
   try {
     const { emailOrUsername, password, rememberMe, deviceInfo } = loginSchema.parse(req.body);
     const tokens = await login({ emailOrUsername, password, rememberMe, deviceInfo });
-    setRefreshCookie(res, tokens.refreshToken);
+    setRefreshCookie(req, res, tokens.refreshToken);
     return res.json({ accessToken: tokens.accessToken });
   } catch (e: unknown) {
     if (e instanceof z.ZodError) return res.status(400).json({ error: e.issues });
@@ -48,7 +48,7 @@ router.post('/refresh', async (req, res) => {
     const refreshToken = req.cookies?.refreshToken as string | undefined;
     if (!refreshToken) return res.status(401).json({ error: 'No refresh cookie' });
     const tokens = await refresh(refreshToken);
-    setRefreshCookie(res, tokens.refreshToken);
+    setRefreshCookie(req, res, tokens.refreshToken);
     return res.json({ accessToken: tokens.accessToken });
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
@@ -59,7 +59,7 @@ router.post('/logout', async (req, res) => {
   try {
     const refreshToken = req.cookies?.refreshToken as string | undefined;
     if (refreshToken) await logout(refreshToken);
-    clearRefreshCookie(res);
+    clearRefreshCookie(req, res);
     return res.json({ ok: true });
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
