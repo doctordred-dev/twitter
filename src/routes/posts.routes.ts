@@ -10,6 +10,47 @@ const createPostSchema = z.object({
   imageUrl: z.string().url().optional(),
 });
 
+// ⚠️ ВАЖНО: Специфичные роуты (feed, favorites, search) должны быть ДО /:id
+// иначе Express воспринимает "feed" как параметр id
+
+// GET feed
+router.get('/feed', authMiddleware, async (req, res) => {
+  try {
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const cursor = (req.query.cursor as string) || null;
+    const data = await getFeed({ userId: req.user!.userId, limit, cursor });
+    return res.json(data);
+  } catch (e: unknown) {
+    return res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+// GET favorites
+router.get('/favorites', authMiddleware, async (req, res) => {
+  try {
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const cursor = (req.query.cursor as string) || null;
+    const data = await getFavorites(req.user!.userId, { limit, cursor });
+    return res.json(data);
+  } catch (e: unknown) {
+    return res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+// Search posts
+router.get('/search', authMiddleware, async (req, res) => {
+  try {
+    const q = (req.query.q as string) || '';
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const cursor = (req.query.cursor as string) || null;
+    const data = await searchPosts(q, { limit, cursor });
+    return res.json(data);
+  } catch (e: unknown) {
+    return res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+// POST create post
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const { text, imageUrl } = createPostSchema.parse(req.body);
@@ -48,7 +89,7 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// GET single post by ID
+// GET single post by ID (ДОЛЖЕН БЫТЬ ПОСЛЕ всех специфичных роутов)
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
@@ -378,30 +419,3 @@ router.delete('/:postId/comments/:commentId', authMiddleware, async (req, res) =
 });
 
 export default router;
-
-// Favorites
-router.get('/favorites', authMiddleware, async (req, res) => {
-  try {
-    const limit = req.query.limit ? Number(req.query.limit) : 10;
-    const cursor = (req.query.cursor as string) || null;
-    const data = await getFavorites(req.user!.userId, { limit, cursor });
-    return res.json(data);
-  } catch (e: unknown) {
-    return res.status(400).json({ error: (e as Error).message });
-  }
-});
-
-// Search posts
-router.get('/search', authMiddleware, async (req, res) => {
-  try {
-    const q = (req.query.q as string) || '';
-    const limit = req.query.limit ? Number(req.query.limit) : 10;
-    const cursor = (req.query.cursor as string) || null;
-    const data = await searchPosts(q, { limit, cursor });
-    return res.json(data);
-  } catch (e: unknown) {
-    return res.status(400).json({ error: (e as Error).message });
-  }
-});
-
-
