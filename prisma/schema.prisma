@@ -28,6 +28,7 @@ model User {
   following     Follow[] @relation("follower")
   followers     Follow[] @relation("following")
   likes         Like[]
+  comments      Comment[]
   conversationMembers ConversationMember[]
   messagesSent  Message[] @relation("messagesSent")
   notifications Notification[]
@@ -44,6 +45,7 @@ model Post {
   isDeleted Boolean  @default(false)
 
   likes     Like[]
+  comments  Comment[]
 
   @@index([authorId, createdAt])
 }
@@ -74,6 +76,22 @@ model Like {
   @@unique([userId, postId])
   @@index([postId])
   @@index([userId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  postId    String
+  authorId  String
+  text      String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  isDeleted Boolean  @default(false)
+
+  post      Post     @relation(fields: [postId], references: [id])
+  author    User     @relation(fields: [authorId], references: [id])
+
+  @@index([postId, createdAt])
+  @@index([authorId])
 }
 
 model Conversation {

@@ -48,6 +48,66 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
+// GET single post by ID
+router.get('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { prisma } = await import('../prisma/client.js');
+    
+    const post = await prisma.post.findUnique({
+      where: { id },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            bio: true,
+            avatarUrl: true,
+            createdAt: true,
+          }
+        },
+        _count: {
+          select: {
+            likes: true,
+            comments: {
+              where: {
+                isDeleted: false
+              }
+            }
+          }
+        },
+        likes: {
+          where: {
+            userId: req.user!.userId
+          },
+          select: {
+            id: true
+          }
+        }
+      }
+    });
+    
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    
+    if (post.isDeleted) {
+      return res.status(404).json({ error: 'Post has been deleted' });
+    }
+    
+    return res.json({
+      post: {
+        ...post,
+        isLiked: post.likes.length > 0,
+        likes: undefined
+      }
+    });
+  } catch (e: unknown) {
+    return res.status(500).json({ error: (e as Error).message });
+  }
+});
+
 router.get('/feed', authMiddleware, async (req, res) => {
   try {
     const limit = req.query.limit ? Number(req.query.limit) : 10;
@@ -56,6 +116,107 @@ router.get('/feed', authMiddleware, async (req, res) => {
     return res.json(data);
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+// PATCH update post
+router.patch('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { text } = req.body;
+    
+    if (!text || text.length === 0 || text.length > 280) {
+      return res.status(400).json({ error: 'Text must be between 1 and 280 characters' });
+    }
+    
+    const { prisma } = await import('../prisma/client.js');
+    
+    // Проверяем что пост принадлежит пользователю
+    const existingPost = await prisma.post.findUnique({
+      where: { id }
+    });
+    
+    if (!existingPost) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    
+    if (existingPost.authorId !== req.user!.userId) {
+      return res.status(403).json({ error: 'You can only edit your own posts' });
+    }
+    
+    // Опционально: проверка времени редактирования (15 минут)
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+    if (existingPost.createdAt < fifteenMinutesAgo) {
+      return res.status(403).json({ error: 'Posts can only be edited within 15 minutes of creation' });
+    }
+    
+    // Обновляем пост
+    const updatedPost = await prisma.post.update({
+      where: { id },
+      data: { 
+        text,
+        updatedAt: new Date()
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            bio: true,
+            avatarUrl: true,
+            createdAt: true,
+          }
+        },
+        _count: {
+          select: { likes: true }
+        },
+        likes: {
+          where: { userId: req.user!.userId },
+          select: { id: true }
+        }
+      }
+    });
+    
+    return res.json({
+      post: {
+        ...updatedPost,
+        isLiked: updatedPost.likes.length > 0,
+        likes: undefined
+      }
+    });
+  } catch (e: unknown) {
+    return res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// DELETE post
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { prisma } = await import('../prisma/client.js');
+    
+    const post = await prisma.post.findUnique({
+      where: { id }
+    });
+    
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    
+    if (post.authorId !== req.user!.userId) {
+      return res.status(403).json({ error: 'You can only delete your own posts' });
+    }
+    
+    // Soft delete
+    await prisma.post.update({
+      where: { id },
+      data: { isDeleted: true }
+    });
+    
+    return res.json({ ok: true });
+  } catch (e: unknown) {
+    return res.status(500).json({ error: (e as Error).message });
   }
 });
 
@@ -76,6 +237,143 @@ router.delete('/:id/like', authMiddleware, async (req, res) => {
     return res.json({ ok: true });
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+// ===== COMMENTS =====
+
+// POST create comment
+router.post('/:id/comments', authMiddleware, async (req, res) => {
+  try {
+    const { id: postId } = req.params;
+    const { text } = req.body;
+    
+    if (!text || text.trim().length === 0) {
+      return res.status(400).json({ error: 'Comment text is required' });
+    }
+    
+    const { prisma } = await import('../prisma/client.js');
+    
+    // Проверяем что пост существует
+    const post = await prisma.post.findUnique({
+      where: { id: postId }
+    });
+    
+    if (!post || post.isDeleted) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    
+    // Создаём комментарий
+    const comment = await prisma.comment.create({
+      data: {
+        postId,
+        authorId: req.user!.userId,
+        text: text.trim()
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true
+          }
+        }
+      }
+    });
+    
+    // Создаём уведомление для автора поста (если это не сам автор)
+    if (post.authorId !== req.user!.userId) {
+      const { createNotification } = await import('../services/notifications.service.js');
+      await createNotification(post.authorId, 'comment', {
+        postId,
+        commentId: comment.id,
+        userId: req.user!.userId
+      });
+    }
+    
+    // Отправляем WebSocket событие
+    const { io } = await import('../sockets/io.js');
+    io?.to(`user:${post.authorId}`).emit('post:comment', { comment });
+    
+    return res.status(201).json({ comment });
+  } catch (e: unknown) {
+    console.error('Create comment error:', e);
+    return res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// GET comments for post
+router.get('/:id/comments', authMiddleware, async (req, res) => {
+  try {
+    const { id: postId } = req.params;
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
+    const cursor = (req.query.cursor as string) || null;
+    
+    const { prisma } = await import('../prisma/client.js');
+    
+    const comments = await prisma.comment.findMany({
+      where: {
+        postId,
+        isDeleted: false
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
+    });
+    
+    const hasMore = comments.length > limit;
+    const items = hasMore ? comments.slice(0, limit) : comments;
+    
+    return res.json({
+      comments: items,
+      nextCursor: hasMore ? items[items.length - 1].id : null
+    });
+  } catch (e: unknown) {
+    console.error('Get comments error:', e);
+    return res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// DELETE comment
+router.delete('/:postId/comments/:commentId', authMiddleware, async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const { prisma } = await import('../prisma/client.js');
+    
+    const comment = await prisma.comment.findUnique({
+      where: { id: commentId }
+    });
+    
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+    
+    if (comment.authorId !== req.user!.userId) {
+      return res.status(403).json({ error: 'You can only delete your own comments' });
+    }
+    
+    // Soft delete
+    await prisma.comment.update({
+      where: { id: commentId },
+      data: { isDeleted: true }
+    });
+    
+    return res.json({ ok: true });
+  } catch (e: unknown) {
+    return res.status(500).json({ error: (e as Error).message });
   }
 });
 

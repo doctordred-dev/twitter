@@ -1,7 +1,7 @@
 import { prisma } from '../prisma/client.js';
 import { io } from '../sockets/io.js';
 
-export type NotificationType = 'new_message' | 'new_post_from_followed' | 'like';
+export type NotificationType = 'new_message' | 'new_post_from_followed' | 'like' | 'comment' | 'follow';
 
 export async function createNotification(userId: string, type: NotificationType, payload: object) {
   const notif = await prisma.notification.create({
