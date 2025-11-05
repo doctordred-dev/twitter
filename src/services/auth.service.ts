@@ -59,6 +59,14 @@ export async function login(input: LoginInput) {
   const days = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS || '7');
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
+  // Удаляем старые истёкшие sessions (чистка)
+  await prisma.session.deleteMany({ 
+    where: { 
+      userId: user.id,
+      expiresAt: { lt: new Date() }
+    } 
+  });
+
   await prisma.session.create({
     data: {
       userId: user.id,
