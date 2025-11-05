@@ -22,11 +22,15 @@ function shouldUseSecure(req: Request): boolean {
 export function setRefreshCookie(req: Request, res: Response, refreshToken: string) {
   const maxAgeDays = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS || '7');
   const useSecure = shouldUseSecure(req);
+  const origin = req.headers.origin || '';
+  
+  // Если origin отличается от хоста API (cross-origin), используем SameSite=None
+  const isCrossOrigin = origin && !origin.includes(req.hostname || 'twitter-bny4.onrender.com');
   
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: useSecure,
-    sameSite: useSecure ? 'lax' : 'lax',
+    sameSite: (useSecure && isCrossOrigin) ? 'none' : 'lax',
     maxAge: maxAgeDays * 24 * 60 * 60 * 1000,
     path: '/',
   });
@@ -34,11 +38,15 @@ export function setRefreshCookie(req: Request, res: Response, refreshToken: stri
 
 export function clearRefreshCookie(req: Request, res: Response) {
   const useSecure = shouldUseSecure(req);
+  const origin = req.headers.origin || '';
+  
+  // Если origin отличается от хоста API (cross-origin), используем SameSite=None
+  const isCrossOrigin = origin && !origin.includes(req.hostname || 'twitter-bny4.onrender.com');
   
   res.clearCookie('refreshToken', {
     httpOnly: true,
     secure: useSecure,
-    sameSite: useSecure ? 'lax' : 'lax',
+    sameSite: (useSecure && isCrossOrigin) ? 'none' : 'lax',
     path: '/',
   });
 }
