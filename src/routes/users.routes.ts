@@ -44,9 +44,101 @@ router.get('/:username', async (req, res) => {
   try {
     const user = await getPublicProfileByUsername(req.params.username);
     if (!user) return res.status(404).json({ error: 'Not found' });
-    return res.json(user);
+    
+    // Проверяем подписку если пользователь аутентифицирован
+    let isFollowing = false;
+    if (req.user) {
+      const { prisma } = await import('../prisma/client.js');
+      const follow = await prisma.follow.findUnique({
+        where: {
+          followerId_followingId: {
+            followerId: req.user.userId,
+            followingId: user.id
+          }
+        }
+      });
+      isFollowing = !!follow;
+    }
+    
+    return res.json({ user, isFollowing });
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+// Get user posts by username
+router.get('/:username/posts', authMiddleware, async (req, res) => {
+  try {
+    const { username } = req.params;
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const cursor = (req.query.cursor as string) || null;
+    
+    const { prisma } = await import('../prisma/client.js');
+    
+    // Находим пользователя
+    const user = await prisma.user.findUnique({
+      where: { username }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Загружаем посты пользователя
+    const posts = await prisma.post.findMany({
+      where: {
+        authorId: user.id,
+        isDeleted: false
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            bio: true,
+            avatarUrl: true,
+            createdAt: true
+          }
+        },
+        _count: {
+          select: {
+            likes: true
+          }
+        },
+        likes: {
+          where: {
+            userId: req.user!.userId
+          },
+          select: {
+            id: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
+    });
+    
+    const hasMore = posts.length > limit;
+    const items = hasMore ? posts.slice(0, limit) : posts;
+    
+    // Добавляем isLiked поле
+    const postsWithIsLiked = items.map((post) => ({
+      ...post,
+      isLiked: post.likes.length > 0,
+      likes: undefined
+    }));
+    
+    return res.json({
+      posts: postsWithIsLiked,
+      nextCursor: hasMore ? items[items.length - 1].id : null
+    });
+  } catch (error) {
+    console.error('Get user posts error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

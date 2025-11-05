@@ -14,7 +14,34 @@ router.post('/', authMiddleware, async (req, res) => {
   try {
     const { text, imageUrl } = createPostSchema.parse(req.body);
     const post = await createPost(req.user!.userId, text, imageUrl);
-    return res.json(post);
+    
+    // Загружаем полный объект поста с author
+    const { prisma } = await import('../prisma/client.js');
+    const fullPost = await prisma.post.findUnique({
+      where: { id: post.id },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            bio: true,
+            avatarUrl: true,
+            createdAt: true,
+          }
+        },
+        _count: {
+          select: { likes: true }
+        }
+      }
+    });
+    
+    return res.status(201).json({
+      post: {
+        ...fullPost,
+        isLiked: false
+      }
+    });
   } catch (e: unknown) {
     if (e instanceof z.ZodError) return res.status(400).json({ error: e.issues });
     return res.status(400).json({ error: (e as Error).message });

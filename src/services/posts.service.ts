@@ -47,7 +47,9 @@ export async function getFeed({ userId, limit = 10, cursor }: FeedParams) {
     select: { followingId: true },
   });
   const authorIds = following.map((f) => f.followingId);
-  if (authorIds.length === 0) return { items: [], nextCursor: null };
+  
+  // ✅ Включаем собственные посты пользователя
+  authorIds.push(userId);
 
   const posts = await prisma.post.findMany({
     where: { authorId: { in: authorIds }, isDeleted: false },
@@ -56,8 +58,23 @@ export async function getFeed({ userId, limit = 10, cursor }: FeedParams) {
     cursor: cursor ? { id: cursor } : undefined,
     skip: cursor ? 1 : 0,
     include: {
-      author: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
-      likes: { select: { userId: true } },
+      author: { 
+        select: { 
+          id: true, 
+          username: true, 
+          displayName: true, 
+          bio: true,
+          avatarUrl: true,
+          createdAt: true 
+        } 
+      },
+      _count: {
+        select: { likes: true }
+      },
+      likes: { 
+        where: { userId },
+        select: { id: true } 
+      },
     },
   });
 
@@ -66,7 +83,15 @@ export async function getFeed({ userId, limit = 10, cursor }: FeedParams) {
     const next = posts.pop();
     nextCursor = next ? next.id : null;
   }
-  return { items: posts, nextCursor };
+  
+  // Добавляем isLiked поле
+  const postsWithIsLiked = posts.map((post) => ({
+    ...post,
+    isLiked: post.likes.length > 0,
+    likes: undefined, // Удаляем временное поле
+  }));
+  
+  return { posts: postsWithIsLiked, nextCursor };
 }
 
 export type Pagination = { limit?: number; cursor?: string | null };
