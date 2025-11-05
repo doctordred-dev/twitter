@@ -153,11 +153,11 @@ Development: http://localhost:3000
 
 #### 9. POST `/posts`
 **Headers:** `Authorization: Bearer <accessToken>`
-**Запрос (multipart/form-data или JSON):**
+**Запрос (JSON):**
 ```json
 {
   "text": "Текст поста (до 280 символов)",
-  "image": "файл (опционально)"
+  "imageUrl": "https://example.com/image.jpg (опционально)"
 }
 ```
 **Ответ (201):**
@@ -168,7 +168,20 @@ Development: http://localhost:3000
     "text": "Текст поста",
     "imageUrl": "/uploads/image.jpg",
     "authorId": "uuid",
-    "createdAt": "2025-01-01T00:00:00.000Z"
+    "createdAt": "2025-01-01T00:00:00.000Z",
+    "isDeleted": false,
+    "author": {
+      "id": "uuid",
+      "username": "username",
+      "displayName": "User Name",
+      "bio": "Bio",
+      "avatarUrl": "/uploads/avatar.jpg",
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    "_count": {
+      "likes": 0
+    },
+    "isLiked": false
   }
 }
 ```
@@ -189,11 +202,14 @@ Development: http://localhost:3000
       "imageUrl": "/uploads/image.jpg",
       "authorId": "uuid",
       "createdAt": "2025-01-01T00:00:00.000Z",
+      "isDeleted": false,
       "author": {
         "id": "uuid",
         "username": "username",
         "displayName": "User Name",
-        "avatarUrl": "/uploads/avatar.jpg"
+        "bio": "Bio",
+        "avatarUrl": "/uploads/avatar.jpg",
+        "createdAt": "2025-01-01T00:00:00.000Z"
       },
       "_count": {
         "likes": 5
@@ -204,6 +220,7 @@ Development: http://localhost:3000
   "nextCursor": "uuid или null"
 }
 ```
+**Примечание:** Лента включает собственные посты пользователя + посты от подписок.
 
 #### 11. POST `/posts/:id/like`
 **Headers:** `Authorization: Bearer <accessToken>`
@@ -239,7 +256,7 @@ Development: http://localhost:3000
 ### Пользователи
 
 #### 15. GET `/users/:username`
-**Headers:** `Authorization: Bearer <accessToken>`
+**Headers:** `Authorization: Bearer <accessToken>` (опционально)
 **Ответ (200):**
 ```json
 {
@@ -254,11 +271,47 @@ Development: http://localhost:3000
       "posts": 42,
       "followers": 100,
       "following": 50
-    },
-    "isFollowing": true
-  }
+    }
+  },
+  "isFollowing": false
 }
 ```
+
+#### 15b. GET `/users/:username/posts?limit=20&cursor=uuid`
+**Headers:** `Authorization: Bearer <accessToken>`
+**Query параметры:**
+- `limit` (опционально, по умолчанию 20)
+- `cursor` (опционально)
+
+**Ответ (200):**
+```json
+{
+  "posts": [
+    {
+      "id": "uuid",
+      "text": "Текст поста",
+      "imageUrl": "/uploads/image.jpg",
+      "authorId": "uuid",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "isDeleted": false,
+      "author": {
+        "id": "uuid",
+        "username": "username",
+        "displayName": "User Name",
+        "bio": "Bio",
+        "avatarUrl": "/uploads/avatar.jpg",
+        "createdAt": "2025-01-01T00:00:00.000Z"
+      },
+      "_count": {
+        "likes": 5
+      },
+      "isLiked": true
+    }
+  ],
+  "nextCursor": "uuid или null"
+}
+```
+**Примечание:** Возвращает посты конкретного пользователя для страницы профиля.
 
 #### 16. PATCH `/users/me`
 **Headers:** 
