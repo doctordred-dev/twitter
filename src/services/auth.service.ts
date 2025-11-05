@@ -69,7 +69,19 @@ export async function login(input: LoginInput) {
     },
   });
 
-  return { accessToken, refreshToken };
+  return { 
+    accessToken, 
+    refreshToken,
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      displayName: user.displayName,
+      bio: user.bio,
+      avatarUrl: user.avatarUrl,
+      createdAt: user.createdAt,
+    }
+  };
 }
 
 export async function refresh(refreshToken: string) {
@@ -96,7 +108,19 @@ export async function refresh(refreshToken: string) {
     data: { tokenHash: newHash, expiresAt },
   });
 
-  return { accessToken, refreshToken: newRefresh };
+  return { 
+    accessToken, 
+    refreshToken: newRefresh,
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      displayName: user.displayName,
+      bio: user.bio,
+      avatarUrl: user.avatarUrl,
+      createdAt: user.createdAt,
+    }
+  };
 }
 
 export async function logout(refreshToken: string) {
