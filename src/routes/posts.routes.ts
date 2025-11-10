@@ -62,7 +62,7 @@ router.get('/search', authMiddleware, async (req, res) => {
     const limit = req.query.limit ? Number(req.query.limit) : 20;
     const cursor = (req.query.cursor as string) || null;
     const data = await searchPosts(q, { limit, cursor });
-    return res.json(data);
+    return res.json({ posts: data.items, nextCursor: data.nextCursor });
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
   }
