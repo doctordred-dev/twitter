@@ -4,6 +4,7 @@ import path from 'path';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { followUser, unfollowUser } from '../services/follows.service.js';
 import { getPublicProfileByUsername, searchUsers, updateMe } from '../services/users.service.js';
+import { getFullUploadUrl } from '../utils/urls.js';
 
 const router = Router();
 
@@ -76,7 +77,14 @@ router.patch('/me', authMiddleware, upload.single('avatar'), async (req, res) =>
   try {
     const displayName = req.body.displayName as string | undefined;
     const bio = req.body.bio as string | undefined;
-    const avatarUrl = req.file ? `/uploads/${req.file.filename}` : undefined;
+    
+    // Генеруємо ПОВНИЙ URL для аватара
+    let avatarUrl: string | undefined;
+    if (req.file) {
+      const relativePath = `/uploads/${req.file.filename}`;
+      avatarUrl = getFullUploadUrl(relativePath) || relativePath;
+    }
+    
     const user = await updateMe({ userId: req.user!.userId, displayName, bio, avatarUrl });
     return res.json(user);
   } catch (e: unknown) {

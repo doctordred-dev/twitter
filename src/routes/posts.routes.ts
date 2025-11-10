@@ -4,6 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { createPost, getFeed, likePost, unlikePost, getFavorites, searchPosts } from '../services/posts.service.js';
+import { getFullUploadUrl } from '../utils/urls.js';
 
 const router = Router();
 
@@ -85,8 +86,9 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
     let imageUrl: string | undefined;
     
     if (req.file) {
-      // FormData з файлом
-      imageUrl = `/uploads/${req.file.filename}`;
+      // FormData з файлом - генеруємо ПОВНИЙ URL
+      const relativePath = `/uploads/${req.file.filename}`;
+      imageUrl = getFullUploadUrl(relativePath) || relativePath;
     } else if (req.body.imageUrl) {
       // JSON з imageUrl
       imageUrl = req.body.imageUrl;
