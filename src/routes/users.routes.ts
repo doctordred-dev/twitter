@@ -148,7 +148,10 @@ router.get('/:username/posts', authMiddleware, async (req, res) => {
         },
         _count: {
           select: {
-            likes: true
+            likes: true,
+            comments: {
+              where: { isDeleted: false }
+            }
           }
         },
         likes: {
@@ -183,6 +186,107 @@ router.get('/:username/posts', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('Get user posts error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get user's following (users that :username follows)
+router.get('/:username/following', authMiddleware, async (req, res) => {
+  try {
+    const { username } = req.params;
+    const { prisma } = await import('../prisma/client.js');
+    
+    // Знаходимо користувача за username
+    const user = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Отримуємо список підписок (користувачів, на яких підписаний user)
+    const following = await prisma.follow.findMany({
+      where: {
+        followerId: user.id // followerId - той хто підписується
+      },
+      include: {
+        following: { // користувач на якого підписались (followingId)
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            bio: true,
+            avatarUrl: true,
+            followers: {
+              where: { followerId: req.user!.userId },
+              select: { id: true }
+            }
+          }
+        }
+      }
+    });
+    
+    const users = following.map(f => ({
+      ...f.following,
+      isFollowing: f.following.followers.length > 0,
+      followers: undefined
+    }));
+    
+    return res.json({ users });
+  } catch (error) {
+    console.error('Get following error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get user's followers (users who follow :username)
+router.get('/:username/followers', authMiddleware, async (req, res) => {
+  try {
+    const { username } = req.params;
+    const { prisma } = await import('../prisma/client.js');
+    
+    const user = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Отримуємо список підписників (користувачів які підписались на user)
+    const followers = await prisma.follow.findMany({
+      where: {
+        followingId: user.id // followingId - той на кого підписуються
+      },
+      include: {
+        follower: { // користувач який підписався (followerId)
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            bio: true,
+            avatarUrl: true,
+            followers: {
+              where: { followerId: req.user!.userId },
+              select: { id: true }
+            }
+          }
+        }
+      }
+    });
+    
+    const users = followers.map(f => ({
+      ...f.follower,
+      isFollowing: f.follower.followers.length > 0,
+      followers: undefined
+    }));
+    
+    return res.json({ users });
+  } catch (error) {
+    console.error('Get followers error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

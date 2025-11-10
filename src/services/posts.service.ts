@@ -42,17 +42,14 @@ export type FeedParams = {
 };
 
 export async function getFeed({ userId, limit = 10, cursor }: FeedParams) {
-  const following = await prisma.follow.findMany({
-    where: { followerId: userId },
-    select: { followingId: true },
-  });
-  const authorIds = following.map((f) => f.followingId);
+  // ✅ ГЛОБАЛЬНА СТРІЧКА - показуємо ВСІ пости від всіх користувачів
+  // (як Twitter/X - для you feed показуються всі пости)
   
-  // ✅ Включаем собственные посты пользователя
-  authorIds.push(userId);
-
   const posts = await prisma.post.findMany({
-    where: { authorId: { in: authorIds }, isDeleted: false },
+    where: { 
+      isDeleted: false 
+      // БЕЗ фільтра по authorId - показуємо ВСІ пости!
+    },
     orderBy: { createdAt: 'desc' },
     take: limit + 1,
     cursor: cursor ? { id: cursor } : undefined,
@@ -69,7 +66,12 @@ export async function getFeed({ userId, limit = 10, cursor }: FeedParams) {
         } 
       },
       _count: {
-        select: { likes: true }
+        select: { 
+          likes: true,
+          comments: {
+            where: { isDeleted: false }
+          }
+        }
       },
       likes: { 
         where: { userId },
