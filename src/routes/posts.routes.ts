@@ -1,9 +1,26 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
+import path from 'path';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { createPost, getFeed, likePost, unlikePost, getFavorites, searchPosts } from '../services/posts.service.js';
 
 const router = Router();
+
+// Multer config for post images
+const uploadsDir = path.join(process.cwd(), 'uploads');
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (_req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `post-${unique}${ext}`);
+  },
+});
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
 
 const createPostSchema = z.object({
   text: z.string().min(1).max(280),
@@ -50,11 +67,32 @@ router.get('/search', authMiddleware, async (req, res) => {
   }
 });
 
-// POST create post
-router.post('/', authMiddleware, async (req, res) => {
+// POST create post (supports both JSON with imageUrl and FormData with image file)
+router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
   try {
-    const { text, imageUrl } = createPostSchema.parse(req.body);
-    const post = await createPost(req.user!.userId, text, imageUrl);
+    const { text } = req.body;
+    
+    // Валідація тексту
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({ error: 'Text is required' });
+    }
+    
+    if (text.length > 280) {
+      return res.status(400).json({ error: 'Text must be 280 characters or less' });
+    }
+    
+    // Визначаємо imageUrl: або з файлу (FormData) або з body (JSON)
+    let imageUrl: string | undefined;
+    
+    if (req.file) {
+      // FormData з файлом
+      imageUrl = `/uploads/${req.file.filename}`;
+    } else if (req.body.imageUrl) {
+      // JSON з imageUrl
+      imageUrl = req.body.imageUrl;
+    }
+    
+    const post = await createPost(req.user!.userId, text.trim(), imageUrl);
     
     // Загружаем полный объект поста с author
     const { prisma } = await import('../prisma/client.js');
@@ -72,7 +110,12 @@ router.post('/', authMiddleware, async (req, res) => {
           }
         },
         _count: {
-          select: { likes: true }
+          select: { 
+            likes: true,
+            comments: {
+              where: { isDeleted: false }
+            }
+          }
         }
       }
     });
@@ -84,7 +127,7 @@ router.post('/', authMiddleware, async (req, res) => {
       }
     });
   } catch (e: unknown) {
-    if (e instanceof z.ZodError) return res.status(400).json({ error: e.issues });
+    console.error('Create post error:', e);
     return res.status(400).json({ error: (e as Error).message });
   }
 });

@@ -19,25 +19,70 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-router.post('/:id/follow', authMiddleware, async (req, res) => {
+// ⚠️ ВАЖНО: Специфичные роуты (search, me) должны быть ДО /:username и /:id
+// иначе Express воспринимает "search" как параметр username
+
+// Search users
+router.get('/search', authMiddleware, async (req, res) => {
   try {
-    await followUser(req.user!.userId, req.params.id);
-    return res.json({ ok: true });
+    const q = (req.query.q as string) || '';
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    
+    if (!q || q.trim().length === 0) {
+      return res.json({ users: [] });
+    }
+    
+    const { prisma } = await import('../prisma/client.js');
+    
+    const users = await prisma.user.findMany({
+      where: {
+        OR: [
+          { username: { contains: q, mode: 'insensitive' } },
+          { displayName: { contains: q, mode: 'insensitive' } }
+        ]
+      },
+      take: limit,
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        bio: true,
+        avatarUrl: true,
+        followers: {
+          where: { followerId: req.user!.userId },
+          select: { id: true }
+        }
+      }
+    });
+    
+    const usersWithFollowStatus = users.map(user => ({
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      bio: user.bio,
+      avatarUrl: user.avatarUrl,
+      isFollowing: user.followers.length > 0
+    }));
+    
+    return res.json({ users: usersWithFollowStatus });
+  } catch (e: unknown) {
+    console.error('User search error:', e);
+    return res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// Update profile (displayName, bio, avatar)
+router.patch('/me', authMiddleware, upload.single('avatar'), async (req, res) => {
+  try {
+    const displayName = req.body.displayName as string | undefined;
+    const bio = req.body.bio as string | undefined;
+    const avatarUrl = req.file ? `/uploads/${req.file.filename}` : undefined;
+    const user = await updateMe({ userId: req.user!.userId, displayName, bio, avatarUrl });
+    return res.json(user);
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
   }
 });
-
-router.delete('/:id/follow', authMiddleware, async (req, res) => {
-  try {
-    await unfollowUser(req.user!.userId, req.params.id);
-    return res.json({ ok: true });
-  } catch (e: unknown) {
-    return res.status(400).json({ error: (e as Error).message });
-  }
-});
-
-export default router;
 
 // Public profile by username
 router.get('/:username', async (req, res) => {
@@ -142,28 +187,23 @@ router.get('/:username/posts', authMiddleware, async (req, res) => {
   }
 });
 
-// Search users
-router.get('/search', async (req, res) => {
+// Follow/unfollow user
+router.post('/:id/follow', authMiddleware, async (req, res) => {
   try {
-    const q = (req.query.q as string) || '';
-    const users = await searchUsers(q, 10);
-    return res.json(users);
+    await followUser(req.user!.userId, req.params.id);
+    return res.json({ ok: true });
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
   }
 });
 
-// Update profile (displayName, bio, avatar)
-router.patch('/me', authMiddleware, upload.single('avatar'), async (req, res) => {
+router.delete('/:id/follow', authMiddleware, async (req, res) => {
   try {
-    const displayName = req.body.displayName as string | undefined;
-    const bio = req.body.bio as string | undefined;
-    const avatarUrl = req.file ? `/uploads/${req.file.filename}` : undefined;
-    const user = await updateMe({ userId: req.user!.userId, displayName, bio, avatarUrl });
-    return res.json(user);
+    await unfollowUser(req.user!.userId, req.params.id);
+    return res.json({ ok: true });
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
   }
 });
 
-
+export default router;
