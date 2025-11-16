@@ -5,19 +5,26 @@ import path from 'path';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { createPost, getFeed, likePost, unlikePost, getFavorites, searchPosts } from '../services/posts.service.js';
 import { getFullUploadUrl } from '../utils/urls.js';
+import { uploadToUploadcare } from '../services/uploadcare.service.js';
 
 const router = Router();
 
 // Multer config for post images
 const uploadsDir = path.join(process.cwd(), 'uploads');
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsDir),
-  filename: (_req, file, cb) => {
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, `post-${unique}${ext}`);
-  },
-});
+
+// Використовуємо memory storage для Uploadcare, disk storage для локального
+const useUploadcare = !!process.env.UPLOADCARE_PUBLIC_KEY;
+const storage = useUploadcare 
+  ? multer.memoryStorage() 
+  : multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, uploadsDir),
+      filename: (_req, file, cb) => {
+        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const ext = path.extname(file.originalname) || '.jpg';
+        cb(null, `post-${unique}${ext}`);
+      },
+    });
+
 const upload = multer({ 
   storage,
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
@@ -86,9 +93,20 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
     let imageUrl: string | undefined;
     
     if (req.file) {
-      // FormData з файлом - генеруємо ПОВНИЙ URL
-      const relativePath = `/uploads/${req.file.filename}`;
-      imageUrl = getFullUploadUrl(relativePath) || relativePath;
+      // Якщо є Uploadcare - використовуємо його, інакше локальне сховище
+      if (process.env.UPLOADCARE_PUBLIC_KEY) {
+        try {
+          imageUrl = await uploadToUploadcare(req.file.buffer, req.file.originalname);
+        } catch (error) {
+          console.error('Uploadcare upload failed, falling back to local:', error);
+          const relativePath = `/uploads/${req.file.filename}`;
+          imageUrl = getFullUploadUrl(relativePath) || relativePath;
+        }
+      } else {
+        // Локальне сховище
+        const relativePath = `/uploads/${req.file.filename}`;
+        imageUrl = getFullUploadUrl(relativePath) || relativePath;
+      }
     } else if (req.body.imageUrl) {
       // JSON з imageUrl
       imageUrl = req.body.imageUrl;

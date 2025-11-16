@@ -5,20 +5,27 @@ import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { followUser, unfollowUser } from '../services/follows.service.js';
 import { getPublicProfileByUsername, searchUsers, updateMe } from '../services/users.service.js';
 import { getFullUploadUrl } from '../utils/urls.js';
+import { uploadToUploadcare } from '../services/uploadcare.service.js';
 
 const router = Router();
 
-// Multer config for avatars (local disk)
+// Multer config for avatars
 const uploadsDir = path.join(process.cwd(), 'uploads');
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsDir),
-  filename: (_req, file, cb) => {
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname) || '.png';
-    cb(null, `avatar-${unique}${ext}`);
-  },
+const useUploadcare = !!process.env.UPLOADCARE_PUBLIC_KEY;
+const storage = useUploadcare
+  ? multer.memoryStorage()
+  : multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, uploadsDir),
+      filename: (_req, file, cb) => {
+        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const ext = path.extname(file.originalname) || '.png';
+        cb(null, `avatar-${unique}${ext}`);
+      },
+    });
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
-const upload = multer({ storage });
 
 // ⚠️ ВАЖНО: Специфичные роуты (search, me) должны быть ДО /:username и /:id
 // иначе Express воспринимает "search" как параметр username
@@ -78,11 +85,23 @@ router.patch('/me', authMiddleware, upload.single('avatar'), async (req, res) =>
     const displayName = req.body.displayName as string | undefined;
     const bio = req.body.bio as string | undefined;
     
-    // Генеруємо ПОВНИЙ URL для аватара
+    // Генеруємо URL для аватара
     let avatarUrl: string | undefined;
     if (req.file) {
-      const relativePath = `/uploads/${req.file.filename}`;
-      avatarUrl = getFullUploadUrl(relativePath) || relativePath;
+      // Якщо є Uploadcare - використовуємо його, інакше локальне сховище
+      if (process.env.UPLOADCARE_PUBLIC_KEY) {
+        try {
+          avatarUrl = await uploadToUploadcare(req.file.buffer, req.file.originalname);
+        } catch (error) {
+          console.error('Uploadcare upload failed, falling back to local:', error);
+          const relativePath = `/uploads/${req.file.filename}`;
+          avatarUrl = getFullUploadUrl(relativePath) || relativePath;
+        }
+      } else {
+        // Локальне сховище
+        const relativePath = `/uploads/${req.file.filename}`;
+        avatarUrl = getFullUploadUrl(relativePath) || relativePath;
+      }
     }
     
     const user = await updateMe({ userId: req.user!.userId, displayName, bio, avatarUrl });
