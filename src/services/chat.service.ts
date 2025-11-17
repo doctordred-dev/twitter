@@ -21,6 +21,16 @@ export async function getMessages(conversationId: string, limit = 20, cursor?: s
     take: limit + 1,
     cursor: cursor ? { id: cursor } : undefined,
     skip: cursor ? 1 : 0,
+    include: {
+      sender: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          avatarUrl: true,
+        },
+      },
+    },
   });
   let nextCursor: string | null = null;
   if (messages.length > limit) {
@@ -60,6 +70,16 @@ export async function sendMessage(conversationId: string, senderId: string, text
   if (!text || text.trim().length === 0) throw new Error('Text required');
   const message = await prisma.message.create({
     data: { conversationId, senderId, text },
+    include: {
+      sender: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          avatarUrl: true,
+        },
+      },
+    },
   });
   // нотифицируем участников беседы
   const members = await prisma.conversationMember.findMany({ where: { conversationId }, select: { userId: true } });
