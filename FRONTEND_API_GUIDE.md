@@ -237,6 +237,114 @@ formData.append('avatar', fileInput.files[0]); // File object
 
 ---
 
+### 7. Отримати репости користувача
+
+**Endpoint:** `GET /users/:username/reposts?limit=20&cursor=uuid`
+
+**Headers:** `Authorization: Bearer <accessToken>`
+
+**Response (200):**
+```json
+{
+  "posts": [
+    {
+      "id": "uuid",
+      "text": "Текст поста",
+      "imageUrl": "https://...",
+      "createdAt": "2025-11-17T00:00:00.000Z",
+      "author": { ... },
+      "_count": {
+        "likes": 5,
+        "comments": 3,
+        "reposts": 2
+      },
+      "isLiked": false,
+      "isReposted": true,
+      "repostedAt": "2025-11-17T01:00:00.000Z",
+      "repostComment": "Коментар до репосту" | null
+    }
+  ],
+  "nextCursor": "uuid" // або null
+}
+```
+
+---
+
+### 8. Отримати коментарі користувача
+
+**Endpoint:** `GET /users/:username/replies?limit=20&cursor=uuid`
+
+**Headers:** `Authorization: Bearer <accessToken>`
+
+**Response (200):**
+```json
+{
+  "replies": [
+    {
+      "comment": {
+        "id": "uuid",
+        "text": "Текст коментаря",
+        "createdAt": "2025-11-17T00:00:00.000Z",
+        "author": {
+          "id": "uuid",
+          "username": "username",
+          "displayName": "Display Name",
+          "avatarUrl": "https://..."
+        }
+      },
+      "post": {
+        "id": "uuid",
+        "text": "Оригінальний пост",
+        "imageUrl": "https://...",
+        "author": { ... },
+        "_count": {
+          "likes": 5,
+          "comments": 3,
+          "reposts": 2
+        },
+        "isLiked": false,
+        "isReposted": false
+      }
+    }
+  ],
+  "nextCursor": "uuid" // або null
+}
+```
+
+---
+
+### 9. Отримати лайки користувача
+
+**Endpoint:** `GET /users/:username/likes?limit=20&cursor=uuid`
+
+**Headers:** `Authorization: Bearer <accessToken>`
+
+**Response (200):**
+```json
+{
+  "posts": [
+    {
+      "id": "uuid",
+      "text": "Текст поста",
+      "imageUrl": "https://...",
+      "createdAt": "2025-11-17T00:00:00.000Z",
+      "author": { ... },
+      "_count": {
+        "likes": 5,
+        "comments": 3,
+        "reposts": 2
+      },
+      "isLiked": true,
+      "isReposted": false,
+      "likedAt": "2025-11-17T01:00:00.000Z"
+    }
+  ],
+  "nextCursor": "uuid" // або null
+}
+```
+
+---
+
 ## 📝 Пости
 
 ### 1. Створити пост

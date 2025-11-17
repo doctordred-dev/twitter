@@ -337,4 +337,266 @@ router.delete('/:id/follow', authMiddleware, async (req, res) => {
   }
 });
 
+// Get user's reposts
+router.get('/:username/reposts', authMiddleware, async (req, res) => {
+  try {
+    const { username } = req.params;
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const cursor = (req.query.cursor as string) || null;
+    
+    const { prisma } = await import('../prisma/client.js');
+    
+    // Знаходимо користувача
+    const user = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Отримуємо репости користувача
+    const reposts = await prisma.repost.findMany({
+      where: { userId: user.id },
+      include: {
+        post: {
+          include: {
+            author: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                bio: true,
+                avatarUrl: true,
+                createdAt: true
+              }
+            },
+            _count: {
+              select: {
+                likes: true,
+                comments: { where: { isDeleted: false } },
+                reposts: true
+              }
+            },
+            likes: {
+              where: { userId: req.user!.userId },
+              select: { id: true }
+            },
+            reposts: {
+              where: { userId: req.user!.userId },
+              select: { id: true }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
+    });
+    
+    const hasMore = reposts.length > limit;
+    const items = hasMore ? reposts.slice(0, limit) : reposts;
+    
+    // Форматуємо відповідь
+    const postsWithFlags = items.map((repost) => ({
+      ...repost.post,
+      isLiked: repost.post.likes.length > 0,
+      isReposted: repost.post.reposts.length > 0,
+      repostedAt: repost.createdAt,
+      repostComment: repost.comment,
+      likes: undefined,
+      reposts: undefined
+    }));
+    
+    return res.json({
+      posts: postsWithFlags,
+      nextCursor: hasMore ? items[items.length - 1].id : null
+    });
+  } catch (error) {
+    console.error('Get user reposts error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get user's replies (comments)
+router.get('/:username/replies', authMiddleware, async (req, res) => {
+  try {
+    const { username } = req.params;
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const cursor = (req.query.cursor as string) || null;
+    
+    const { prisma } = await import('../prisma/client.js');
+    
+    // Знаходимо користувача
+    const user = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Отримуємо коментарі користувача
+    const comments = await prisma.comment.findMany({
+      where: {
+        authorId: user.id,
+        isDeleted: false
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true
+          }
+        },
+        post: {
+          include: {
+            author: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                bio: true,
+                avatarUrl: true,
+                createdAt: true
+              }
+            },
+            _count: {
+              select: {
+                likes: true,
+                comments: { where: { isDeleted: false } },
+                reposts: true
+              }
+            },
+            likes: {
+              where: { userId: req.user!.userId },
+              select: { id: true }
+            },
+            reposts: {
+              where: { userId: req.user!.userId },
+              select: { id: true }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
+    });
+    
+    const hasMore = comments.length > limit;
+    const items = hasMore ? comments.slice(0, limit) : comments;
+    
+    // Форматуємо відповідь - повертаємо коментарі з постами
+    const repliesWithPosts = items.map((comment) => ({
+      comment: {
+        id: comment.id,
+        text: comment.text,
+        createdAt: comment.createdAt,
+        author: comment.author
+      },
+      post: {
+        ...comment.post,
+        isLiked: comment.post.likes.length > 0,
+        isReposted: comment.post.reposts.length > 0,
+        likes: undefined,
+        reposts: undefined
+      }
+    }));
+    
+    return res.json({
+      replies: repliesWithPosts,
+      nextCursor: hasMore ? items[items.length - 1].id : null
+    });
+  } catch (error) {
+    console.error('Get user replies error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get user's liked posts
+router.get('/:username/likes', authMiddleware, async (req, res) => {
+  try {
+    const { username } = req.params;
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const cursor = (req.query.cursor as string) || null;
+    
+    const { prisma } = await import('../prisma/client.js');
+    
+    // Знаходимо користувача
+    const user = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Отримуємо лайки користувача
+    const likes = await prisma.like.findMany({
+      where: { userId: user.id },
+      include: {
+        post: {
+          include: {
+            author: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                bio: true,
+                avatarUrl: true,
+                createdAt: true
+              }
+            },
+            _count: {
+              select: {
+                likes: true,
+                comments: { where: { isDeleted: false } },
+                reposts: true
+              }
+            },
+            likes: {
+              where: { userId: req.user!.userId },
+              select: { id: true }
+            },
+            reposts: {
+              where: { userId: req.user!.userId },
+              select: { id: true }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
+    });
+    
+    const hasMore = likes.length > limit;
+    const items = hasMore ? likes.slice(0, limit) : likes;
+    
+    // Форматуємо відповідь
+    const postsWithFlags = items.map((like) => ({
+      ...like.post,
+      isLiked: like.post.likes.length > 0,
+      isReposted: like.post.reposts.length > 0,
+      likedAt: like.createdAt,
+      likes: undefined,
+      reposts: undefined
+    }));
+    
+    return res.json({
+      posts: postsWithFlags,
+      nextCursor: hasMore ? items[items.length - 1].id : null
+    });
+  } catch (error) {
+    console.error('Get user likes error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
