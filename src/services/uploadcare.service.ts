@@ -21,16 +21,41 @@ export async function uploadToUploadcare(file: Buffer | string, filename: string
   }
 
   try {
+    console.log('🔄 Starting file upload to Uploadcare...');
+    console.log('📁 Filename:', filename);
+    console.log('🔑 Public Key:', publicKey?.substring(0, 10) + '...');
+    console.log('📦 File size:', Buffer.isBuffer(file) ? `${file.length} bytes` : 'unknown');
+
     const result = await client.uploadFile(file, {
       fileName: filename,
       contentType: 'auto',
+      store: true, // ВАЖЛИВО: зберігати файл в Uploadcare (не тимчасово)
     });
 
-    // Return CDN URL
-    return `https://ucarecdn.com/${result.uuid}/`;
+    console.log('✅ File uploaded successfully!');
+    console.log('🆔 UUID:', result.uuid);
+    console.log('🔗 CDN URL:', result.cdnUrl);
+
+    // Verify file is accessible
+    const cdnUrl = result.cdnUrl || `https://ucarecdn.com/${result.uuid}/`;
+    console.log('🔍 Verifying file accessibility...');
+    
+    try {
+      const testResponse = await fetch(cdnUrl, { method: 'HEAD' });
+      console.log('✅ File verification status:', testResponse.status);
+      
+      if (!testResponse.ok) {
+        console.warn('⚠️ File not immediately accessible, but this is normal. CDN propagation may take a few seconds.');
+      }
+    } catch (verifyError) {
+      console.warn('⚠️ Could not verify file immediately:', verifyError);
+    }
+
+    return cdnUrl;
   } catch (error) {
-    console.error('Uploadcare upload error:', error);
-    throw new Error('Failed to upload file to Uploadcare');
+    console.error('❌ Uploadcare upload failed:', error);
+    console.error('Error details:', JSON.stringify(error, null, 2));
+    throw new Error(`Failed to upload file to Uploadcare: ${(error as Error).message}`);
   }
 }
 
