@@ -121,18 +121,33 @@ router.get(
   '/google/callback',
   passport.authenticate('google', { session: false }),
   async (req, res) => {
+    console.log('🟢 [Callback] Google callback route hit');
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
     try {
+      console.log('🟢 [Callback] req.user:', req.user);
       const user = req.user as any;
-      if (!user || !user.id) {
+      
+      if (!user) {
+        console.error('❌ [Callback] No user in req.user');
         return res.redirect(
-          `${frontendUrl}/login?error=${encodeURIComponent('Google auth failed')}`
+          `${frontendUrl}/login?error=${encodeURIComponent('Google auth failed - no user')}`
         );
       }
 
+      if (!user.userId) {
+        console.error('❌ [Callback] No userId in req.user:', user);
+        return res.redirect(
+          `${frontendUrl}/login?error=${encodeURIComponent('Google auth failed - no userId')}`
+        );
+      }
+
+      console.log('✅ [Callback] User authenticated:', { userId: user.userId, username: user.username });
+
       // Видаємо наші токени (access + refresh) через існуючу логіку сесій
-      const tokens = await loginWithProvider(user.id, 'google-oauth', true);
+      console.log('🔑 [Callback] Generating tokens...');
+      const tokens = await loginWithProvider(user.userId, 'google-oauth', true);
+      console.log('✅ [Callback] Tokens generated');
 
       const userPayload = {
         id: tokens.user.id,
@@ -146,8 +161,11 @@ router.get(
 
       const redirectUrl = `${frontendUrl}/auth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}&user=${userEncoded}`;
 
+      console.log('🔄 [Callback] Redirecting to:', redirectUrl);
       return res.redirect(redirectUrl);
     } catch (e: unknown) {
+      console.error('❌ [Callback] Error:', e);
+      console.error('❌ [Callback] Error stack:', (e as Error).stack);
       const message = (e as Error).message || 'Google OAuth failed';
       return res.redirect(
         `${frontendUrl}/login?error=${encodeURIComponent(message)}`
