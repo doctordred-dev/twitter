@@ -12,6 +12,9 @@ dotenv.config();
 export const createApp = () => {
   const app = express();
   
+  // Trust proxy for Render (behind reverse proxy)
+  app.set('trust proxy', 1);
+  
   // CORS configuration
   const allowedOrigins = process.env.CORS_ORIGIN 
     ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
