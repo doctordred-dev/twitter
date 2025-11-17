@@ -481,4 +481,172 @@ router.delete('/:postId/comments/:commentId', authMiddleware, async (req, res) =
   }
 });
 
+// ===== REPOSTS =====
+
+// POST create repost
+router.post('/:id/repost', authMiddleware, async (req, res) => {
+  try {
+    const { id: postId } = req.params;
+    const { comment } = req.body;
+    
+    const { prisma } = await import('../prisma/client.js');
+    
+    // Перевіряємо що пост існує
+    const post = await prisma.post.findUnique({
+      where: { id: postId }
+    });
+    
+    if (!post || post.isDeleted) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    
+    // Перевіряємо чи вже є репост
+    const existingRepost = await prisma.repost.findUnique({
+      where: {
+        userId_postId: {
+          userId: req.user!.userId,
+          postId
+        }
+      }
+    });
+    
+    if (existingRepost) {
+      return res.status(400).json({ error: 'Already reposted' });
+    }
+    
+    // Створюємо репост
+    const repost = await prisma.repost.create({
+      data: {
+        userId: req.user!.userId,
+        postId,
+        comment: comment?.trim() || null
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true
+          }
+        },
+        post: {
+          include: {
+            author: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatarUrl: true
+              }
+            },
+            _count: {
+              select: {
+                likes: true,
+                comments: { where: { isDeleted: false } },
+                reposts: true
+              }
+            }
+          }
+        }
+      }
+    });
+    
+    // Створюємо сповіщення для автора поста (якщо це не він сам)
+    if (post.authorId !== req.user!.userId) {
+      const { createNotification } = await import('../services/notifications.service.js');
+      await createNotification(post.authorId, 'repost', {
+        postId,
+        repostId: repost.id,
+        userId: req.user!.userId
+      });
+    }
+    
+    // Відправляємо WebSocket подію
+    const { io } = await import('../sockets/io.js');
+    io?.to(`user:${post.authorId}`).emit('post:repost', { repost });
+    
+    return res.status(201).json({ repost });
+  } catch (e: unknown) {
+    console.error('Create repost error:', e);
+    return res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// DELETE repost
+router.delete('/:id/repost', authMiddleware, async (req, res) => {
+  try {
+    const { id: postId } = req.params;
+    const { prisma } = await import('../prisma/client.js');
+    
+    const repost = await prisma.repost.findUnique({
+      where: {
+        userId_postId: {
+          userId: req.user!.userId,
+          postId
+        }
+      }
+    });
+    
+    if (!repost) {
+      return res.status(404).json({ error: 'Repost not found' });
+    }
+    
+    await prisma.repost.delete({
+      where: {
+        userId_postId: {
+          userId: req.user!.userId,
+          postId
+        }
+      }
+    });
+    
+    return res.json({ ok: true });
+  } catch (e: unknown) {
+    console.error('Delete repost error:', e);
+    return res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// GET reposts of a post
+router.get('/:id/reposts', authMiddleware, async (req, res) => {
+  try {
+    const { id: postId } = req.params;
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const cursor = (req.query.cursor as string) || null;
+    
+    const { prisma } = await import('../prisma/client.js');
+    
+    const reposts = await prisma.repost.findMany({
+      where: { postId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
+    });
+    
+    const hasMore = reposts.length > limit;
+    const items = hasMore ? reposts.slice(0, limit) : reposts;
+    
+    return res.json({
+      reposts: items,
+      nextCursor: hasMore ? items[items.length - 1].id : null
+    });
+  } catch (e: unknown) {
+    console.error('Get reposts error:', e);
+    return res.status(500).json({ error: (e as Error).message });
+  }
+});
+
 export default router;

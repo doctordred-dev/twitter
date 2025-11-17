@@ -29,6 +29,7 @@ model User {
   followers     Follow[] @relation("following")
   likes         Like[]
   comments      Comment[]
+  reposts       Repost[]
   conversationMembers ConversationMember[]
   messagesSent  Message[] @relation("messagesSent")
   notifications Notification[]
@@ -46,6 +47,7 @@ model Post {
 
   likes     Like[]
   comments  Comment[]
+  reposts   Repost[]
 
   @@index([authorId, createdAt])
 }
@@ -92,6 +94,22 @@ model Comment {
 
   @@index([postId, createdAt])
   @@index([authorId])
+}
+
+model Repost {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id])
+
+  @@unique([userId, postId])
+  @@index([userId])
+  @@index([postId])
+  @@index([createdAt])
 }
 
 model Conversation {

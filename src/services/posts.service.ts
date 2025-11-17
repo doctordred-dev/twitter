@@ -70,12 +70,17 @@ export async function getFeed({ userId, limit = 10, cursor }: FeedParams) {
           likes: true,
           comments: {
             where: { isDeleted: false }
-          }
+          },
+          reposts: true
         }
       },
       likes: { 
         where: { userId },
         select: { id: true } 
+      },
+      reposts: {
+        where: { userId },
+        select: { id: true }
       },
     },
   });
@@ -86,14 +91,16 @@ export async function getFeed({ userId, limit = 10, cursor }: FeedParams) {
     nextCursor = next ? next.id : null;
   }
   
-  // Добавляем isLiked поле
-  const postsWithIsLiked = posts.map((post) => ({
+  // Добавляем isLiked и isReposted поля
+  const postsWithFlags = posts.map((post) => ({
     ...post,
     isLiked: post.likes.length > 0,
+    isReposted: post.reposts.length > 0,
     likes: undefined, // Удаляем временное поле
+    reposts: undefined, // Удаляем временное поле
   }));
   
-  return { posts: postsWithIsLiked, nextCursor };
+  return { posts: postsWithFlags, nextCursor };
 }
 
 export type Pagination = { limit?: number; cursor?: string | null };
