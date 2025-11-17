@@ -26,30 +26,28 @@ export async function uploadToUploadcare(file: Buffer | string, filename: string
     console.log('🔑 Public Key:', publicKey?.substring(0, 10) + '...');
     console.log('📦 File size:', Buffer.isBuffer(file) ? `${file.length} bytes` : 'unknown');
 
+    // Завантажуємо файл з негайним збереженням
     const result = await client.uploadFile(file, {
       fileName: filename,
       contentType: 'auto',
-      store: true, // ВАЖЛИВО: зберігати файл в Uploadcare (не тимчасово)
+      store: true, // true = негайне збереження
     });
 
     console.log('✅ File uploaded successfully!');
     console.log('🆔 UUID:', result.uuid);
     console.log('🔗 CDN URL:', result.cdnUrl);
 
-    // Verify file is accessible
-    const cdnUrl = result.cdnUrl || `https://ucarecdn.com/${result.uuid}/`;
-    console.log('🔍 Verifying file accessibility...');
+    // Використовуємо cdnUrl з відповіді (Uploadcare повертає правильний URL)
+    // Або використовуємо Proxy domain якщо CDN не працює
+    const cdnUrl = result.cdnUrl || `https://${publicKey}.ucr.io/${result.uuid}/`;
     
-    try {
-      const testResponse = await fetch(cdnUrl, { method: 'HEAD' });
-      console.log('✅ File verification status:', testResponse.status);
-      
-      if (!testResponse.ok) {
-        console.warn('⚠️ File not immediately accessible, but this is normal. CDN propagation may take a few seconds.');
-      }
-    } catch (verifyError) {
-      console.warn('⚠️ Could not verify file immediately:', verifyError);
-    }
+    console.log('');
+    console.log('⚠️ ВАЖЛИВО: Якщо файл не доступний через CDN:');
+    console.log('   1. Перевір Uploadcare Dashboard → Settings → Delivery');
+    console.log('   2. Переконайся що "Public access" ENABLED');
+    console.log('   3. Переконайся що проект активний (не trial)');
+    console.log('   4. Файл має бути в Dashboard → Files');
+    console.log('');
 
     return cdnUrl;
   } catch (error) {

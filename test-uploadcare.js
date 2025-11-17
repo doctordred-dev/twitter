@@ -46,29 +46,61 @@ async function testUpload() {
     const result = await client.uploadFile(testImageBuffer, {
       fileName: 'test-image.png',
       contentType: 'image/png',
-      store: true, // ВАЖЛИВО: зберігати файл постійно
+      store: true, // true = негайне збереження
     });
 
     console.log('✅ Upload successful!\n');
     console.log('📊 Upload Result:');
     console.log('  UUID:', result.uuid);
-    console.log('  CDN URL:', result.cdnUrl);
-    console.log('  Original URL:', result.originalUrl);
-    console.log('  File ID:', result.fileId);
     console.log('');
 
-    // Перевіряємо доступність файлу
+    // Дочекаємося поки файл буде stored
+    console.log('⏳ Waiting for file to be stored...');
+    let fileInfo;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    while (attempts < maxAttempts) {
+      try {
+        const response = await fetch(`https://api.uploadcare.com/files/${result.uuid}/`, {
+          headers: {
+            'Authorization': `Uploadcare.Simple ${publicKey}:${secretKey}`,
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          fileInfo = await response.json();
+          console.log(`  Attempt ${attempts + 1}: File status - ${fileInfo.status || 'unknown'}`);
+          
+          if (fileInfo.status === 'stored' || fileInfo.is_stored) {
+            console.log('✅ File is stored!');
+            break;
+          }
+        }
+      } catch (error) {
+        console.warn(`  Attempt ${attempts + 1}: Failed to get file info -`, error.message);
+      }
+
+      attempts++;
+      if (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    // Використовуємо cdnUrl з відповіді
     const cdnUrl = result.cdnUrl || `https://ucarecdn.com/${result.uuid}/`;
-    console.log('🔍 Verifying file accessibility...');
-    console.log('  Testing URL:', cdnUrl);
-
-    const response = await fetch(cdnUrl, { method: 'HEAD' });
-    console.log('  HTTP Status:', response.status, response.statusText);
-    console.log('  Content-Type:', response.headers.get('content-type'));
-    console.log('  Content-Length:', response.headers.get('content-length'));
+    console.log('');
+    console.log('🔗 CDN URL:', cdnUrl);
     console.log('');
 
-    if (response.ok) {
+    // Фінальна перевірка доступності
+    console.log('🔍 Verifying file accessibility...');
+    const testResponse = await fetch(cdnUrl, { method: 'HEAD' });
+    console.log('  HTTP Status:', testResponse.status, testResponse.statusText);
+
+    if (testResponse.ok) {
+      console.log('');
       console.log('✅ File is accessible!');
       console.log('');
       console.log('🎉 SUCCESS! Uploadcare is working correctly.');
@@ -76,9 +108,10 @@ async function testUpload() {
       console.log('📝 You can view the test image at:');
       console.log('  ', cdnUrl);
     } else {
-      console.log('❌ File is not accessible (HTTP', response.status, ')');
       console.log('');
-      console.log('⚠️ This might be a temporary issue. Try again in a few seconds.');
+      console.log('⚠️ File uploaded but HTTP', testResponse.status);
+      console.log('');
+      console.log('Check Uploadcare Dashboard: https://app.uploadcare.com/');
     }
 
   } catch (error) {

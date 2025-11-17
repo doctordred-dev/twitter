@@ -5,16 +5,16 @@ import path from 'path';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { createPost, getFeed, likePost, unlikePost, getFavorites, searchPosts } from '../services/posts.service.js';
 import { getFullUploadUrl } from '../utils/urls.js';
-import { uploadToUploadcare } from '../services/uploadcare.service.js';
+import { uploadToCloudinary } from '../services/cloudinary.service.js';
 
 const router = Router();
 
 // Multer config for post images
 const uploadsDir = path.join(process.cwd(), 'uploads');
 
-// Використовуємо memory storage для Uploadcare, disk storage для локального
-const useUploadcare = !!process.env.UPLOADCARE_PUBLIC_KEY;
-const storage = useUploadcare 
+// Використовуємо memory storage для Cloudinary, disk storage для локального
+const useCloudinary = !!process.env.CLOUDINARY_CLOUD_NAME;
+const storage = useCloudinary 
   ? multer.memoryStorage() 
   : multer.diskStorage({
       destination: (_req, _file, cb) => cb(null, uploadsDir),
@@ -93,12 +93,12 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
     let imageUrl: string | undefined;
     
     if (req.file) {
-      // Якщо є Uploadcare - використовуємо його, інакше локальне сховище
-      if (process.env.UPLOADCARE_PUBLIC_KEY) {
+      // Якщо є Cloudinary - використовуємо його, інакше локальне сховище
+      if (process.env.CLOUDINARY_CLOUD_NAME) {
         try {
-          imageUrl = await uploadToUploadcare(req.file.buffer, req.file.originalname);
+          imageUrl = await uploadToCloudinary(req.file.buffer, req.file.originalname);
         } catch (error) {
-          console.error('Uploadcare upload failed, falling back to local:', error);
+          console.error('Cloudinary upload failed, falling back to local:', error);
           const relativePath = `/uploads/${req.file.filename}`;
           imageUrl = getFullUploadUrl(relativePath) || relativePath;
         }

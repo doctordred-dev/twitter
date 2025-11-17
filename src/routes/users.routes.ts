@@ -5,14 +5,14 @@ import { authMiddleware } from '../middlewares/authMiddleware.js';
 import { followUser, unfollowUser } from '../services/follows.service.js';
 import { getPublicProfileByUsername, searchUsers, updateMe } from '../services/users.service.js';
 import { getFullUploadUrl } from '../utils/urls.js';
-import { uploadToUploadcare } from '../services/uploadcare.service.js';
+import { uploadToCloudinary } from '../services/cloudinary.service.js';
 
 const router = Router();
 
 // Multer config for avatars
 const uploadsDir = path.join(process.cwd(), 'uploads');
-const useUploadcare = !!process.env.UPLOADCARE_PUBLIC_KEY;
-const storage = useUploadcare
+const useCloudinary = !!process.env.CLOUDINARY_CLOUD_NAME;
+const storage = useCloudinary
   ? multer.memoryStorage()
   : multer.diskStorage({
       destination: (_req, _file, cb) => cb(null, uploadsDir),
@@ -88,12 +88,12 @@ router.patch('/me', authMiddleware, upload.single('avatar'), async (req, res) =>
     // Генеруємо URL для аватара
     let avatarUrl: string | undefined;
     if (req.file) {
-      // Якщо є Uploadcare - використовуємо його, інакше локальне сховище
-      if (process.env.UPLOADCARE_PUBLIC_KEY) {
+      // Якщо є Cloudinary - використовуємо його, інакше локальне сховище
+      if (process.env.CLOUDINARY_CLOUD_NAME) {
         try {
-          avatarUrl = await uploadToUploadcare(req.file.buffer, req.file.originalname);
+          avatarUrl = await uploadToCloudinary(req.file.buffer, req.file.originalname);
         } catch (error) {
-          console.error('Uploadcare upload failed, falling back to local:', error);
+          console.error('Cloudinary upload failed, falling back to local:', error);
           const relativePath = `/uploads/${req.file.filename}`;
           avatarUrl = getFullUploadUrl(relativePath) || relativePath;
         }
