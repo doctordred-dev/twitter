@@ -4,6 +4,8 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import path from 'path';
 import rateLimit from 'express-rate-limit';
+import passport from 'passport';
+import './config/passport.js';
 
 dotenv.config();
 
@@ -30,6 +32,7 @@ export const createApp = () => {
   }));
   app.use(express.json());
   app.use(cookieParser());
+  app.use(passport.initialize());
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   // rate limits

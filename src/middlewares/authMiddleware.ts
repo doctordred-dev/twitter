@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../utils/jwt.js';
 
+// Тип User визначений в passport.ts або @types/passport
 declare global {
   namespace Express {
-    interface Request {
-      user?: { userId: string; username: string };
+    interface User {
+      userId: string;
+      username: string;
     }
   }
 }

@@ -92,6 +92,52 @@ export async function login(input: LoginInput) {
   };
 }
 
+// Використовується для зовнішніх провайдерів (наприклад, Google OAuth),
+// коли користувач вже автентифікований, і потрібно видати токени.
+export async function loginWithProvider(userId: string, deviceInfo?: string, rememberMe = true) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error('User not found');
+
+  const accessToken = signAccessToken({ userId: user.id, username: user.username });
+  const refreshToken = generateRefreshToken();
+  const tokenHash = hashToken(refreshToken);
+
+  const days = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS || '7');
+  const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+  // Чистимо старі прострочені сесії
+  await prisma.session.deleteMany({
+    where: {
+      userId: user.id,
+      expiresAt: { lt: new Date() },
+    },
+  });
+
+  await prisma.session.create({
+    data: {
+      userId: user.id,
+      tokenHash,
+      rememberMe,
+      deviceInfo,
+      expiresAt,
+    },
+  });
+
+  return {
+    accessToken,
+    refreshToken,
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      displayName: user.displayName,
+      bio: user.bio,
+      avatarUrl: user.avatarUrl,
+      createdAt: user.createdAt,
+    },
+  };
+}
+
 export async function refresh(refreshToken: string) {
   const tokenHash = hashToken(refreshToken);
   const session = await prisma.session.findFirst({ where: { tokenHash } });

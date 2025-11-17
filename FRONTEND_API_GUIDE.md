@@ -41,14 +41,14 @@ Development: http://localhost:3000
 
 ---
 
-### 2. Логін
+### 2. Логін (localStorage)
 
 **Endpoint:** `POST /auth/login`
 
 **Request:**
 ```json
 {
-  "email": "user@example.com",
+  "emailOrUsername": "user@example.com",
   "password": "password123",
   "rememberMe": true
 }
@@ -57,7 +57,8 @@ Development: http://localhost:3000
 **Response (200):**
 ```json
 {
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "accessToken": "jwt_access_token",
+  "refreshToken": "jwt_refresh_token",
   "user": {
     "id": "uuid",
     "email": "user@example.com",
@@ -69,38 +70,153 @@ Development: http://localhost:3000
 }
 ```
 
-**Cookies:**
-- `refreshToken` (httpOnly, secure) - автоматично встановлюється
+**Фронтенд:**
+- зберігає `accessToken` і `refreshToken` в `localStorage`
+
+```ts
+localStorage.setItem('accessToken', data.accessToken);
+localStorage.setItem('refreshToken', data.refreshToken);
+```
 
 ---
 
-### 3. Refresh Token
+### 3. Refresh Token (через body)
 
 **Endpoint:** `POST /auth/refresh`
 
-**Cookies:** `refreshToken` (автоматично)
+**Request:**
+```json
+{
+  "refreshToken": "jwt_refresh_token"
+}
+```
 
 **Response (200):**
 ```json
 {
-  "accessToken": "new_token..."
+  "accessToken": "new_jwt_access_token",
+  "refreshToken": "new_jwt_refresh_token",
+  "user": {
+    "id": "uuid",
+    "username": "username",
+    "email": "user@example.com",
+    "displayName": "Display Name",
+    "avatarUrl": "https://..."
+  }
+}
+```
+
+**Фронтенд:**
+- читає `refreshToken` з `localStorage`
+- оновлює токени в `localStorage`
+
+```ts
+async function refreshTokens() {
+  const refreshToken = localStorage.getItem('refreshToken');
+  if (!refreshToken) throw new Error('No refresh token');
+
+  const res = await fetch('/auth/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  const data = await res.json();
+  localStorage.setItem('accessToken', data.accessToken);
+  localStorage.setItem('refreshToken', data.refreshToken);
+  return data;
 }
 ```
 
 ---
 
-### 4. Logout
+### 4. Logout (localStorage)
 
 **Endpoint:** `POST /auth/logout`
 
-**Headers:** `Authorization: Bearer <accessToken>`
+**Request (опціонально):**
+```json
+{
+  "refreshToken": "jwt_refresh_token"
+}
+```
 
 **Response (200):**
 ```json
 {
-  "ok": true
+  "message": "Logged out successfully"
 }
 ```
+
+**Фронтенд:**
+- може надіслати `refreshToken` на бекенд (для інвалідації сесії)
+- в будь-якому випадку чистить `localStorage`
+
+```ts
+async function logout() {
+  const refreshToken = localStorage.getItem('refreshToken');
+
+  await fetch('/auth/logout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+}
+```
+
+---
+
+### 5. Google OAuth
+
+#### Крок 1: Кнопка входу через Google
+
+```ts
+function loginWithGoogle() {
+  window.location.href = `${API_BASE_URL}/auth/google`;
+}
+```
+
+Бекенд редіректить на Google OAuth, після успішного логіну Google викликає `/auth/google/callback` на бекенді, який потім редіректить на фронтенд:
+
+```txt
+{FRONTEND_URL}/auth/callback?
+  accessToken=jwt_access_token&
+  refreshToken=jwt_refresh_token&
+  user=%7B%22id%22%3A%22...%22%2C%22username%22%3A%22...%22%7D
+```
+
+#### Крок 2: Обробка `/auth/callback` на фронтенді
+
+```ts
+// /auth/callback page on frontend
+function handleAuthCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const accessToken = params.get('accessToken');
+  const refreshToken = params.get('refreshToken');
+  const userParam = params.get('user');
+
+  if (!accessToken || !refreshToken || !userParam) {
+    // помилка авторизації
+    return;
+  }
+
+  const user = JSON.parse(decodeURIComponent(userParam));
+
+  localStorage.setItem('accessToken', accessToken);
+  localStorage.setItem('refreshToken', refreshToken);
+  localStorage.setItem('user', JSON.stringify(user));
+
+  // редірект в додаток (наприклад, на головну)
+  window.location.replace('/');
+}
+```
+
+**Примітка:**
+- `FRONTEND_URL` має бути налаштований в `.env` бекенда
+- На фронтенді сторінка `/auth/callback` повинна викликати `handleAuthCallback()` один раз при завантаженні
 
 ---
 

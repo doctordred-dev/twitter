@@ -1,8 +1,11 @@
+import crypto from 'crypto';
 import { Router } from 'express';
 import { z } from 'zod';
-import { login, logout, refresh, register } from '../services/auth.service.js';
-import { setRefreshCookie, clearRefreshCookie } from '../utils/cookies.js';
+import passport from 'passport';
+import { prisma } from '../prisma/client.js';
+import { login, logout, refresh, register, loginWithProvider } from '../services/auth.service.js';
 import { sendVerificationToken, sendResetToken, resetPassword, verifyEmailToken } from '../services/email-auth.service.js';
+import { hashPassword } from '../utils/password.js';
 
 const router = Router();
 
@@ -35,10 +38,11 @@ router.post('/login', async (req, res) => {
   try {
     const { emailOrUsername, password, rememberMe, deviceInfo } = loginSchema.parse(req.body);
     const tokens = await login({ emailOrUsername, password, rememberMe, deviceInfo });
-    setRefreshCookie(req, res, tokens.refreshToken);
+    // ✅ Повертаємо обидва токени в JSON, без cookies
     return res.json({ 
       accessToken: tokens.accessToken,
-      user: tokens.user
+      refreshToken: tokens.refreshToken,
+      user: tokens.user,
     });
   } catch (e: unknown) {
     if (e instanceof z.ZodError) return res.status(400).json({ error: e.issues });
@@ -48,13 +52,14 @@ router.post('/login', async (req, res) => {
 
 router.post('/refresh', async (req, res) => {
   try {
-    const refreshToken = req.cookies?.refreshToken as string | undefined;
-    if (!refreshToken) return res.status(401).json({ error: 'No refresh cookie' });
+    const { refreshToken } = req.body as { refreshToken?: string };
+    if (!refreshToken) return res.status(401).json({ error: 'No refresh token' });
     const tokens = await refresh(refreshToken);
-    setRefreshCookie(req, res, tokens.refreshToken);
+    // ✅ Повертаємо нові токени, без cookies
     return res.json({ 
       accessToken: tokens.accessToken,
-      user: tokens.user
+      refreshToken: tokens.refreshToken,
+      user: tokens.user,
     });
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
@@ -63,10 +68,12 @@ router.post('/refresh', async (req, res) => {
 
 router.post('/logout', async (req, res) => {
   try {
-    const refreshToken = req.cookies?.refreshToken as string | undefined;
-    if (refreshToken) await logout(refreshToken);
-    clearRefreshCookie(req, res);
-    return res.json({ ok: true });
+    // ✅ Інвалідовуємо refreshToken з body (якщо переданий)
+    const { refreshToken } = req.body as { refreshToken?: string };
+    if (refreshToken) {
+      await logout(refreshToken);
+    }
+    return res.json({ message: 'Logged out successfully' });
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
   }
@@ -97,6 +104,57 @@ router.post('/send-verification', async (req, res) => {
     return res.status(400).json({ error: (e as Error).message });
   }
 });
+
+// ===== Google OAuth (Passport) =====
+
+// Ініціація Google OAuth
+router.get(
+  '/google',
+  passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    session: false,
+  })
+);
+
+// Callback від Google
+router.get(
+  '/google/callback',
+  passport.authenticate('google', { session: false }),
+  async (req, res) => {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+    try {
+      const user = req.user as any;
+      if (!user || !user.id) {
+        return res.redirect(
+          `${frontendUrl}/login?error=${encodeURIComponent('Google auth failed')}`
+        );
+      }
+
+      // Видаємо наші токени (access + refresh) через існуючу логіку сесій
+      const tokens = await loginWithProvider(user.id, 'google-oauth', true);
+
+      const userPayload = {
+        id: tokens.user.id,
+        username: tokens.user.username,
+        email: tokens.user.email,
+        displayName: tokens.user.displayName,
+        avatarUrl: tokens.user.avatarUrl,
+      };
+
+      const userEncoded = encodeURIComponent(JSON.stringify(userPayload));
+
+      const redirectUrl = `${frontendUrl}/auth/callback?accessToken=${tokens.accessToken}&refreshToken=${tokens.refreshToken}&user=${userEncoded}`;
+
+      return res.redirect(redirectUrl);
+    } catch (e: unknown) {
+      const message = (e as Error).message || 'Google OAuth failed';
+      return res.redirect(
+        `${frontendUrl}/login?error=${encodeURIComponent(message)}`
+      );
+    }
+  }
+);
 
 // Forgot password
 router.post('/forgot', async (req, res) => {
